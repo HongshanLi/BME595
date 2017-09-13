@@ -54,6 +54,7 @@ c = np.multiply(a, b)
 c = c.reshape(5,4)
 print(c)
 """
+"""
 n = NeuralNetwork([2,3,4,1])
 print("Inital weights")
 print(n.Theta)
@@ -64,17 +65,17 @@ print("\n")
 print("Intial Value at each layer")
 print(n.layers)
 print("feed an array")
-x = np.array([2,3])
+x = np.array([[2,3],[5,8]])
 n.forward(x)
 print("output of each layers")
 print(n.layers)
 print("\n")
 print("local weight gradient")
-print(n.backward(np.array([[100]], np.float32)))
+print(n.backward(np.array([[100], [20]], np.float32)))
 print("\n")
 print("global gradients")
 print(n.dE_dTheta)
-
+"""
 
 """
 a = np.array([[1,2],[3,4]])
@@ -82,5 +83,15 @@ b = np.array([[1],[10]])
 print(b.sum(axis=1))
 print(np.multiply(a, b.sum(axis=1)))
 """
+def vectorization(array, times, axis):
+    batch_size = array.shape[0]
+    out = array
+    for i in range(1,times):
+        out = np.concatenate([out, array], axis=axis)
+    out = out.flatten("F")
+    out = out.reshape(batch_size,-1)
+    return out 
+
+A = np.array([[1,2,3],[4,5,6]])
 
         

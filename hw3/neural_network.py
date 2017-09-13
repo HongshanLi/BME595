@@ -1,10 +1,12 @@
 import numpy as np
 import math
+from six.moves import xrange
 
 class NeuralNetwork():
     def __init__(self, shape=list()):
         self.shape = shape
-        self.layers = [np.zeros([self.shape[i]]).reshape(-1,self.shape[i]) for i in xrange(len(self.shape))] # output of each layer
+        self.layers = [np.zeros([self.shape[i]]).reshape(-1,self.shape[i]) 
+            for i in xrange(len(self.shape))] # output of each layer
         self.Theta = [] # weight of each layer
         for i in range(len(shape)-1):
             self.Theta.append(np.random.rand(shape[i], shape[i+1]))
@@ -43,11 +45,12 @@ class NeuralNetwork():
         absolute_error = np.abs(self.layers[-1] - target)
         
         def vectorization(array, times, axis):
+            batch_size = array.shape[0]
             out = array
             for i in range(1,times):
                 out = np.concatenate([out, array], axis=axis)
             out = out.flatten("F")
-            out = out.reshape(1,-1)
+            out = out.reshape(batch_size,-1)
             return out
 
         Theta_local_gradient = [0 for i in range(len(self.Theta))]
@@ -58,9 +61,10 @@ class NeuralNetwork():
             right_time = w_left.shape[-1]
             left_time = w_right.shape[-1]
             w_right = vectorization(w_right, right_time, axis=1)
+            sigmoid_prime = w_right(w_right - 1)
             w_left = vectorization(w_left, left_time, axis=0)
-            w = np.multiply(w_left, w_right)
-            w = w.reshape(right_time, left_time)
+            w = np.multiply(w_left, sigmoid_prime)
+            w = w.reshape(-1, right_time, left_time)
             Theta_local_gradient[i] = w
             i+=1 
         # To compute the local gradient of the last layer, we need backprop abosolute_error
