@@ -44,14 +44,22 @@ class NeuralNetwork():
     def backward(self, target):
         absolute_error = np.abs(self.layers[-1] - target)
         
-        def vectorization(array, times, axis):
-            batch_size = array.shape[0]
+        def vectorize_left_layer(array, times):
+            array = array.flatten("C")
+            array = array.reshape(1, -1)
             out = array
             for i in range(1,times):
-                out = np.concatenate([out, array], axis=axis)
+                out = np.concatenate([out, array], axis=0)
             out = out.flatten("F")
-            out = out.reshape(batch_size,-1)
+            return out 
+
+        def vectorize_right_layer(array, times):
+            out = array
+            for i in range(1, times):
+                out = np.concatenate([out, array], axis=1)
+            out = out.flatten("C")
             return out
+        
 
         Theta_local_gradient = [0 for i in range(len(self.Theta))]
         i = 0
@@ -60,10 +68,11 @@ class NeuralNetwork():
             w_left = self.layers[i]
             right_time = w_left.shape[-1]
             left_time = w_right.shape[-1]
-            w_right = vectorization(w_right, right_time, axis=1)
-            sigmoid_prime = w_right(w_right - 1)
-            w_left = vectorization(w_left, left_time, axis=0)
+            w_right = vectorize_right_layer(w_right, right_time)
+            sigmoid_prime = w_right*(w_right - 1)
+            w_left = vectorize_left_layer(w_left, left_time)
             w = np.multiply(w_left, sigmoid_prime)
+  
             w = w.reshape(-1, right_time, left_time)
             Theta_local_gradient[i] = w
             i+=1 
@@ -72,19 +81,25 @@ class NeuralNetwork():
         w_left = self.layers[-2]
         right_time = w_left.shape[-1]
         left_time = w_right.shape[-1]
-        w_right = vectorization(w_right, right_time, axis=1)
-        w_left = vectorization(w_left, left_time, axis=0)
+        w_right = vectorize_right_layer(w_right, right_time)
+        w_left = vectorize_left_layer(w_left, left_time)
         w = np.multiply(w_left, w_right)
-        w = w.reshape(right_time, left_time)
+        w = w.reshape(-1, right_time, left_time)
         Theta_local_gradient[-1] = w
 
         # Multiply local gradients together to get global gradient by chain rule
-        self.dE_dTheta[-1] = Theta_local_gradient[-1]
-        n = len(Theta_local_gradient)-1
-        i = 1
-        for i in range(1, n+1):
-            self.dE_dTheta[n-i] = np.multiply(Theta_local_gradient[n-i],
-                self.dE_dTheta[n-(i-1)].sum(axis=1))
+        # 
+        self.dE_dTheta = Theta_local_gradient
+        
+        for i in range(1, len(self.dE_dTheta)):        
+            A = self.dE_dTheta[-i] 
+            B = self.dE_dTheta[-(i+1)]
+            num_neuron = B.shape[1]
+            A = A.sum(axis=-1)
+            A = vectorize_left_layer(A, num_neuron)
+            A = A.reshape(B.shape[0], B.shape[1], B.shape[2])
+            self.dE_dTheta[-(i+1)] = np.multiply(B, A)
+
 
         return Theta_local_gradient
         
