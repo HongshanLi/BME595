@@ -1,0 +1,17 @@
+import numpy as np
+A = np.random.rand(3,2)
+print(A)
+print("flatten C")
+A = A.flatten("C")
+A = A.reshape(1, -1)
+C = np.concatenate([A]*3, axis=0)
+print(A)
+print("C")
+print(C)
+print("reshape C")
+C = C.flatten("F")
+print(C)
+print("reshape to what I want")
+C = C.reshape(3, 2, 3)
+print(C)
+
