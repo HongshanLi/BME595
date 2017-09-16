@@ -4,6 +4,7 @@ from six.moves import xrange
 
 class NeuralNetwork():
     def __init__(self, shape=list()):
+        
         self.shape = shape
         
         self.layers = []
@@ -126,8 +127,6 @@ class NeuralNetwork():
             return A
 
         
-        tmp1 = []
-        tmp2 = []
         i = 0
         for dw in self.dlayer_dTheta:
             if i < num_layers - 2:
@@ -139,10 +138,15 @@ class NeuralNetwork():
                 self.dE_dTheta[i] = dw
             i+=1
 
+    def updateParams(self, eta):
+        i=0
+        for w, dw in zip(self.Theta, self.dE_dTheta):
+            self.Theta[i] = w - eta*dw
+            i+=1
+
         
             
             
-        return tmp1, tmp2
 
 
 
