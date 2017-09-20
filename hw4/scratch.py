@@ -2,38 +2,26 @@ import numpy as np
 from neural_network import NeuralNetwork
 
 # I want to see if I have the correct initializaiton
-n = NeuralNetwork([2,3,4,1])
+n = NeuralNetwork([2,3,4,3,2])
 print("initial layers")
-print(n.layers, "\n")
+print(n.layers)
 print("initial weights")
-print(n.Theta, "\n")
+print(n.Theta)
 print("initial dlayer_dTheta")
-print(n.dlayer_dTheta, "\n")
+print(n.Dlocal_output_Dweight)
 print("inital local derivative")
-print(n.local_derivative,  "\n")
+print(n.Dlocal_output_Dlocal_input)
 print("initial dE_dTheta")
-print(n.dE_dTheta, "\n")
+print(n.dE_dTheta)
 x = np.array([[2,3],[4,5],[7,8],[9,10],[2,7]], np.float32)
-y = np.array([[1000],[2000],[3000],[4000],[5000]], np.float32)
+y = np.array([[1000, 2000],[2000,3000],[3000, 4000],[4000, 5000],[5000, 6000]], np.float32)
 print("forward and backward")
 n.forward(x)
 print("chain at each level")
-print(n.backward(y))
+n.backward(y)
 
 
 
-
-
-print("updated layers")
-print(n.layers)
-print("updated weights")
-print(n.Theta)
-print("updated dlayer_dTheta")
-print(n.dlayer_dTheta)
-print("updated local derivative")
-print(n.local_derivative)
-print("updated dE_dTheta")
-print(n.dE_dTheta)
 
 
 

@@ -15,16 +15,16 @@ class NeuralNetwork():
         for i in range(len(shape)-1):
             self.Theta.append(np.random.rand(shape[i], shape[i+1]))
         
-        self.dlayer_dTheta = [] 
+        self.Dlocal_output_Dweight = [] 
         i = 0
         for layer in self.layers[1:]:
-            self.dlayer_dTheta.append(np.zeros([1, self.shape[i], self.shape[i+1]]))
+            self.Dlocal_output_Dweight.append(np.zeros([self.shape[i], self.shape[i+1]]))
             i+=1
          
-        self.local_derivative = [] # dlayer[n] /dlayer[n-1]
-        i=0
-        for layer in self.layers[1:]:
-            self.local_derivative.append(np.zeros([1, shape[i], shape[i+1]]))
+        self.Dlocal_output_Dlocal_input = [] # dlayer[n] /dlayer[n-1]
+        i=1
+        for layer in self.layers[2:]:
+            self.Dlocal_output_Dlocal_input.append(np.zeros([shape[i], shape[i+1]]))
             i+=1
 
         self.dE_dTheta = []
@@ -51,132 +51,114 @@ class NeuralNetwork():
                 x = np.dot(x, w)
             self.layers[i] = x
             i+=1
+        return x
 
     
 
 
     def backward(self, target, loss="MSE"):
-        """
-        If loss==CE, then this function will computes the softmax of the output layer,
-        :and compute the cross-entropy between the softmax output layer and the one-hot
-        encoded label.
-        """
-
-        def soft_max(output_layer):
-            D = np.exp(output_layer).sum(axis=1)
-            times = output_layer.shape[1]
-            D = np.concatenate([D]*times, axis=0)
-            D = D.flatten("F")
-            D = D.reshape(output_layer.shape[0], output_layer.shape[1])
-            N = np.exp(output_layer)
-            
-            return N / D
-
+        # update self.Dlocal_output_Dlocal_input
+        # Local output and the weight matrix are the input
         
-        # To be used to update dlayer[n]/dlayer[n-1]
-        def vectorize_each_layer(array, times):
-            A = np.concatenate([array]*times, axis=1)
-            A = A.reshape(array.shape[0], times, array.shape[1])
-            return A
+        def vectorize_local_output_and_weight(local_output, weight):
+            b = local_output.mean(axis=0)
+            w = weight
+            v_b = b.flatten("C")
+            v_b = np.concatenate([v_b]*w.shape[0])
+            v_w = w.flatten("C")
+            return v_b, v_w
         
-        # To be used to update dlayer[n]/dlayer[n-1] 
-        def vectorize_weight(array, batch_size):
-            A = np.concatenate([array]*batch_size, axis=0)
-            A = A.reshape(batch_size, array.shape[0], array.shape[1])
-            return A
-
-        
-        # Update local derivates
-        # differentiate MSE
-        batch_size = self.layers[0].shape[0]
-        num_layers = len(self.shape)
-
+        # update self.Dlocal_output_Dlocal_input except the last layer
+        # Activation function are sigmoid except at the last layer
         i=0
-        for weight, layer in zip(self.Theta, self.layers[1:]):
-            times = self.layers[i].shape[-1]
-            W = vectorize_weight(weight, batch_size)
-            if i < num_layers - 2:
-                L = vectorize_each_layer(layer, times)
-                C = np.multiply(np.multiply(L, L-1), -W).mean(axis=0)
-            else:
-                E = layer - target
-                E = vectorize_each_layer(E, times)
-                C = np.multiply(E, W).mean(axis=0) # There is no nonlinearity for the output
-            
-            self.local_derivative[i] = C
+        for w, layer in zip(self.Theta[1:-1], self.layers[2:-1]):
+            print("Actual layer and weight")
+            print(layer.mean(axis=0), w)
+            v_local_output, v_weight = vectorize_local_output_and_weight(layer, w)
+            print("vectorized local_output and weight")
+            print(v_local_output, v_weight)
+            M = np.multiply(np.multiply(v_local_output, v_local_output -1), -v_weight)
+            M = M.reshape(w.shape[0], w.shape[1])
+            self.Dlocal_output_Dlocal_input[i] = M
             i+=1
-
  
-        # Update dlayer_dTheta
-        def vectorize_input(array, batch_size, next_layer_size):
-            A = array.flatten("C")
-            A = A.reshape(1, -1)
-            A = np.concatenate([A]*next_layer_size, axis=0)
-            A = A.flatten("F")
-            A = A.reshape(batch_size, array.shape[1], next_layer_size )
-            return A
+        # update the last entry of self.Dlocal_output_Dlocal_input
+        # Take into account that the activation is linear in the last module
+        self.Dlocal_output_Dlocal_input[-1]=self.Theta[-1]
+ 
+        # update self.Dlocal_output_Dweight
+        # Local output and previous local input are the input
+        
+        def vectorize_local_output_and_local_input(local_output, local_input):
+            b = local_output.mean(axis=0)
+            a = local_input.mean(axis=0)
+            v_b = b.flatten("C")
+            v_b = np.concatenate([v_b]*a.shape[0])
+            a = a.reshape(1,-1)
+            v_a = np.concatenate([a]*b.shape[0])
+            v_a = v_a.flatten("F")
+            return v_b, v_a
+
+        # update self.Dlocal_output_Dweight except for the last module
+        i = 0
+        for layer, next_layer in zip(self.layers[:-2], self.layers[1:-1]):
+            v_local_output, v_local_input = vectorize_local_output_and_local_input(next_layer, layer) 
+            M = np.multiply(np.multiply(v_local_output, v_local_output-1), -v_local_input)
+            M = M.reshape(layer.shape[1], next_layer.shape[1])
+            self.Dlocal_output_Dweight[i] = M
+            i+=1
+
+        # update self.Dlocal_output_Dweight for the last module
+        a = self.layers[-2].mean(axis=0).reshape(1, -1)
+        v_a = np.concatenate([a]*self.shape[-1])
+        v_a = v_a.flatten("F").reshape(self.shape[-2], self.shape[-1])
+        self.Dlocal_output_Dweight[-1] = v_a
+           
+
+
+        # back-propogates dE/d(last_layer)
+        if loss == "MSE":
+            dE_dLast_layer = self.layers[-1] - target
+            dE_dLast_layer = dE_dLast_layer.mean(axis=0).reshape(1, -1)
+            dE_dLast_layer = dE_dLast_layer.sum(axis=1).reshape(1, 1)
+            dE_dLast_layer = np.concatenate([dE_dLast_layer]*self.shape[-1], axis=0)
+
+            
+
+        # For sake of chain, I need to define a function that computes the dot-product of a list of 
+        # compatible numpy arraies
+        
+        def compute_chain(list_of_arries):
+            x = list_of_arries[0]
+            if len(list_of_arries) > 1:
+                for y in list_of_arries[1:]:
+                    x = np.dot(x, y)
+                return x
+            else:
+                return x
+
+        def dE_dweight(dE, dw):
+            v_dE = dE.flatten()
+            v_dE = np.concatenate([v_dE]*dw.shape[0])
+            v_dw = dw.flatten()
+            dE_dw = np.multiply(v_dE, v_dw).reshape(dw.shape[0], dw.shape[1])
+            return dE_dw
         
         i=0
-        for layer, next_layer in zip(self.layers[:-1], self.layers[1:]):
-            A = vectorize_input(layer, batch_size, next_layer.shape[-1])
-            B = vectorize_each_layer(next_layer, times=layer.shape[-1])
-            if i < num_layers -2:
-                C = np.multiply(np.multiply(B, B-1), -A).mean(axis=0)
-                self.dlayer_dTheta[i] = C
-            else:
-                C = np.multiply(B, A).mean(axis=0)
-            
-            self.dlayer_dTheta[i] = C
+        for dw in self.Dlocal_output_Dweight:
+            C = self.Dlocal_output_Dlocal_input[i:]
+            C.append(dE_dLast_layer)
+            C = compute_chain(C)
+            print("Current chain")
+            print(C)
+            print("Current weight differential")
+            print(dw)
+            dE_dw = dE_dweight(C, dw)
+            self.dE_dTheta[i] = dE_dw
+            print("dE_dw")
+            print(dE_dw)
             i+=1
 
-
-        # Compute dE_dTheta via chain rule
-        def compute_chain(dlayer_dTheta_index):
-            # it computes the chain after dlayer_dTheta[dlayer_dTheta_index]
-            j = dlayer_dTheta_index + 1
-            x = self.local_derivative[j]
-            for y in self.local_derivative[j+1:]:
-                x = np.dot(x, y)
-            print("current chain")
-            print(x)
-            return x
-        
-        def vectorize_chain(array, times):
-            A = np.concatenate([array]*times)
-            A = A.flatten("F")
-            print("Vectorized Chain")
-            print(A)
-            return A 
-        
-        def vectorize_dw(array, times):
-            A = array.flatten("C")
-            A = np.concatenate([A]*times)
-            print("vectorized dw")
-            print(A)
-            return A
-        
-        i = 0
-        for dw in self.dlayer_dTheta:
-            if i < num_layers - 2:
-                times_for_chain = dw.shape[0]
-                C = compute_chain(i)
-                times_for_dw = C.shape[1]
-                C = vectorize_chain(C, times_for_chain)
-                v_dw = vectorize_dw(dw, times_for_dw)
-                self.dE_dTheta[i] = np.multiply(v_dw, C).reshape(dw.shape[0], dw.shape[1])
-            else:
-                E = self.layers[-1] - target
-                E = E.mean(axis=0)
-                E = E.reshape(1, -1)
-                times_for_dw = E.shape[1]
-                right_before_last_layer = self.layers[-2]
-                right_before_last_layer = right_before_last_layer.mean(axis=0)
-                right_before_last_layer = right_before_last_layer.reshape(1, -1)
-                times_for_chain = right_before_last_layer.shape[0]
-                E = vectorize_chain(E, times_for_chain)
-                right_before_last_layer = vectorize_dw(right_before_last_layer, times_for_dw)
-                self.dE_dTheta[i] = np.multiply(E, right_before_last_layer).reshape(dw.shape[0],dw.shape[1])
-            i+=1
 
     def updateParams(self, eta):
         i=0
