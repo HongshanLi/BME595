@@ -6,6 +6,7 @@ class NeuralNetwork():
     def __init__(self, shape=list()):
         
         self.shape = shape
+        self.current_error = 0
         
         self.layers = []
         for i in range(len(self.shape)):
@@ -72,11 +73,7 @@ class NeuralNetwork():
         # Activation function are sigmoid except at the last layer
         i=0
         for w, layer in zip(self.Theta[1:-1], self.layers[2:-1]):
-            print("Actual layer and weight")
-            print(layer.mean(axis=0), w)
             v_local_output, v_weight = vectorize_local_output_and_weight(layer, w)
-            print("vectorized local_output and weight")
-            print(v_local_output, v_weight)
             M = np.multiply(np.multiply(v_local_output, v_local_output -1), -v_weight)
             M = M.reshape(w.shape[0], w.shape[1])
             self.Dlocal_output_Dlocal_input[i] = M
@@ -119,11 +116,29 @@ class NeuralNetwork():
         # back-propogates dE/d(last_layer)
         if loss == "MSE":
             dE_dLast_layer = self.layers[-1] - target
+            self.current_error = np.abs(dE_dLast_layer.mean())
             dE_dLast_layer = dE_dLast_layer.mean(axis=0).reshape(1, -1)
             dE_dLast_layer = dE_dLast_layer.sum(axis=1).reshape(1, 1)
             dE_dLast_layer = np.concatenate([dE_dLast_layer]*self.shape[-1], axis=0)
 
+        
+        # if loss is cross-entropy, then we need to define a few helper functions to
+        # compute softmax of the last layer, and the derivative of the cross-entropy
+        # with repect to the last layer
+        def softmax(array):
+            return 0
+
             
+        def cross_entropy_prime(prediction, label):
+            # takes softmax of the prediction and label inside
+            # label needs to be onehot encoded
+            # compute derivative of the cross-entropy of the softmax 
+            # with respect to the prediction 
+            return 0
+
+      
+                   
+
 
         # For sake of chain, I need to define a function that computes the dot-product of a list of 
         # compatible numpy arraies
@@ -149,14 +164,8 @@ class NeuralNetwork():
             C = self.Dlocal_output_Dlocal_input[i:]
             C.append(dE_dLast_layer)
             C = compute_chain(C)
-            print("Current chain")
-            print(C)
-            print("Current weight differential")
-            print(dw)
             dE_dw = dE_dweight(C, dw)
             self.dE_dTheta[i] = dE_dw
-            print("dE_dw")
-            print(dE_dw)
             i+=1
 
 
