@@ -7,6 +7,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
+from time import time
+import matplotlib.pyplot as plt
+
 
 class img2num(nn.Module):
     def __init__(self):
@@ -14,81 +17,73 @@ class img2num(nn.Module):
         self.fc1 = nn.Linear(784, 50)
         self.fc2 = nn.Linear(50, 20)
         self.fc3 = nn.Linear(20, 10)
-
+        self.epoch = []
+        self.epoch_accuracy = []
+    
     def forward(self, x):
         x = F.sigmoid(self.fc1(x))
         x = F.sigmoid(self.fc2(x))
         x = F.log_softmax(self.fc3(x))
-        return 
+        return x 
 
     def train(self):
+        start_time = time()
+        num_epoch = 5
         batch_size = 100
         optimizer = optim.SGD(self.parameters(), lr=0.1)
-
-        dataset = MNIST(root="/homes/li108/Dataset/Mnist", train=True,
+        log_interval = 100
+        epoch = 1
+        train_dataset = MNIST(root="/homes/li108/Dataset/Mnist", train=True,
                         transform=transforms.ToTensor())
         
-        train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-                
-        for batch_index, (data, target) in enumerate(train_loader):
-            data = data.view(batch_size, -1)
-            data, target = Variable(data), Variable(target)
-            optimizer.zero_grad()
-            output = self.forward(data)
-            loss = F.nll_loss(output, target)
-            loss.backward()
-            optimizer.step()
+        test_dataset = MNIST(root="/homes/li108/Dataset/Mnist", train=False,
+                        transform=transforms.ToTensor())
 
-
-
-
-class img2num(NeuralNetwork):
-    def __init__(self):
-        NeuralNetwork.__init__(self, shape=[784, 50, 20,10])
-        self.average_training_error=[] # keeps track of average training error per epoch
-
-
-    def train(self):
-        learning_rate = 0.1
-        dataset = MNIST(root="/homes/li108/Dataset/Mnist", train=True,
-                         transform=transforms.ToTensor())
-        num_epoch = 1
-        batch_size = 100
-        num_batch_per_epoch = len(dataset) / batch_size
-    
-        # after each epoch shuffle the data
-    
-        train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    
-        # convert features into flat numpy array but keep batch
-        def flatten_each_input(batch):
-            A = batch.numpy()
-            A = A.flatten()
-            A = A.reshape(batch_size, -1)
-            return A
-
-        def one_hot_encode_label(batch_target):
-            batch_label = np.zeros([batch_size, 10])
-            batch_label[np.arange(batch_size), batch_target.numpy()] = 1
-            return batch_label
-
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+        
         for epoch in range(num_epoch):
-            epoch_error = 0
-            for batch_index, (features, target) in enumerate(train_loader):
-                features = flatten_each_input(features)
-                one_hot_labels = one_hot_encode_label(target)
-                self.forward(features)
-                self.backward(one_hot_labels)
-                self.updateParams(learning_rate)
-                epoch_error += self.current_error
+            self.epoch.append(epoch+1)
+            for batch_idx, (data, target) in enumerate(train_loader):
+                data = data.view(batch_size, -1)
+                data, target = Variable(data), Variable(target)
+                optimizer.zero_grad()
+                output = self.forward(data)
+                loss = F.nll_loss(output, target)
+                loss.backward()
+                optimizer.step()
 
-            self.average_training_error.append(epoch_error / num_batch_per_epoch)
-        
-        print(self.average_training_error)
-        
+
+        # test accuracy on test set
+            print("Now testing accuracy")
+            test_loss = 0
+            correct = 0
+            for data, target in test_loader:
+                data = data.view(batch_size, -1)
+                data, target = Variable(data, volatile=True), Variable(target)
+                output = self.forward(data)
+                test_loss+=F.nll_loss(output, target, size_average=False).data[0]
+                pred = output.data.max(1, keepdim=True)[1]
+                correct += pred.eq(target.data.view_as(pred)).cpu().sum()
+
+            test_loss /= len(test_loader.dataset)
+            print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{}({:.0f}%)\n'.format(
+                test_loss, correct, len(test_loader.dataset), 
+                100. * correct/ len(test_loader.dataset)))
+            
+            accuracy = float(correct) / len(test_loader.dataset) 
+            self.epoch_accuracy.append(accuracy)
+
+        end_time = time()
+        print("total run time: %f" % (end_time - start_time))
+
+
+
 
 n = img2num()
 n.train()
+plt.scatter(x=n.epoch, y=n.epoch_accuracy)
+plt.savefig("nn_img2num_performance.png")
 
     
         
