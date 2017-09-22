@@ -5,8 +5,24 @@ import torch.optim as optim
 from torch.autograd import Variable
 from torchvision.datasets import CIFAR100
 from torchvision import transforms
+from torch.utils.data import DataLoader
 from time import time
+import argparse
 
+parser = argparse.ArgumentParser(description='Lenet on CIFAR100')
+parser.add_argument("--batch_size", type=int, default=128, metavar="N",
+    help="mini-batch size")
+parser.add_argument("--epoch", type=int, default=10, metavar="N",
+    help="number of epochs to train")
+parser.add_argument("--lr", type=float, default=0.1, metavar="LR",
+    help="learning rate")
+parser.add_argument("--momentum", type=float, default=0.5, metavar="M",
+    help="SGD momentum")
+parser.add_argument("--seed", type=int, default=5, metavar="S",
+    help="random seed to for initialization")
+parser.add_argument("--log_interval", type=int, default=100, metavar="N",
+    help="number of steps to print out one log")
+args = parser.parse_args()
 
 class LeNet(nn.Module):
     def __init__(self):
@@ -16,31 +32,68 @@ class LeNet(nn.Module):
         self.fc1 = nn.Linear(16*8*8, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 100)
+        self.optim = optim.SGD(self.parameters(), lr=args.lr, 
+            momentum=args.momentum)
 
     def forward(self, x):
-        print(x.shape)
         x = F.relu(self.conv1(x))
-        print(x.shape)
         x = F.max_pool2d(x, 2)
-        print(x.shape)
         x = F.relu(self.conv2(x))
-        print(x.shape)
         x = F.max_pool2d(x, 2)
-        print(x.shape)
         x = x.view(-1, 8*8*16)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
-        return x
+        return F.log_softmax(x)
 
-data = CIFAR100(root="~/Dataset/CIFAR100",transform=transforms.ToTensor())
-x, y = data.__getitem__([0:100])
-x = x.view(100, 3, 32, 32)
-x = Variable(x)
-start_time = time()
+    def train(self):
+        print("Starting a new epoch with learning rate: %f" % args.lr)
+    
+        train_data = CIFAR100(root="~/Dataset/CIFAR100", train=True,
+            transform=transforms.Compose([transforms.ToTensor(),
+                    transforms.Normalize((0.5, 0.5, 0.5),(0.5, 0.5, 0.5))]))
+        train_data_loader = DataLoader(train_data, batch_size = args.batch_size,
+            shuffle=True)
 
-Net = LeNet()
-Net.forward(x)
-end_time = time()
-run_time = end_time - start_time
-print(run_time)       
+
+        for batch_idx, (data, target) in enumerate(train_data_loader):
+            data, target = Variable(data), Variable(target)
+            self.optim.zero_grad()
+            pred = self.forward(data)
+            loss = F.nll_loss(pred, target)
+            loss.backward()
+            self.optim.step()
+            if batch_idx % args.log_interval==0:
+                print("Step: %d, negative log loss %f" % (batch_idx, loss.data[0]))
+        
+        # log parameters of current epoch
+        torch.save(self.state_dict(), "latest_parameters.pt")
+
+    def evaluate(self):              
+        # Accuracy of the model after the current epoch
+        test_data = CIFAR100(root="~/Dataset/CIFAR100", train=False,
+            transform=transforms.Compose([transforms.ToTensor(),
+            transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))]))
+        test_data_loader = DataLoader(test_data, batch_size=len(test_data),
+            shuffle=False)
+        for data, target in test_data_loader:
+            data, target = Variable(data, volatile=True), Variable(target)
+            pred = self.forward(data)
+            test_loss = F.nll_loss(pred, target, size_average=False).data[0]
+            pred = pred.data.max(1, keepdim=True)[1]
+            correct = pred.eq(target.data.view_as(pred)).cpu().sum()
+
+        print("The accuracy is:%f" % (float(correct) / float(len(test_data))))
+
+            
+
+            
+if __name__=="__main__":
+    initial_learning_rate = args.lr
+    a = LeNet()
+    for epoch in range(100):
+        args.lr = initial_learning_rate / (epoch + 1)
+        a.train()
+        a.evaluate()
+
+
