@@ -22,7 +22,8 @@ parser.add_argument("--seed", type=int, default=5, metavar="S",
     help="random seed to for initialization")
 parser.add_argument("--log_interval", type=int, default=100, metavar="N",
     help="number of steps to print out one log")
-
+parser.add_argument("--num_epoch", type=int, default=100, metavar="N",
+    help="number of epochs to train")
 
 args = parser.parse_args()
 
@@ -103,7 +104,7 @@ if __name__=="__main__":
     initial_learning_rate = args.lr
     a = LeNet()
     f = open("training_log", "w+")
-    for epoch in range(2):
+    for epoch in range(args.num_epoch):
         args.lr = initial_learning_rate
         a.train()
         torch.save(a.state_dict(), "parameters_epoch"+str(epoch)+".pt")
