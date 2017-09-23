@@ -34,6 +34,9 @@ class LeNet(nn.Module):
         self.fc3 = nn.Linear(256, 100)
         self.optim = optim.SGD(self.parameters(), lr=args.lr, 
             momentum=args.momentum)
+        self.training_loss = 0
+        self.test_loss = 0
+        self.accuracy = 0
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
@@ -55,7 +58,7 @@ class LeNet(nn.Module):
         train_data_loader = DataLoader(train_data, batch_size = args.batch_size,
             shuffle=True)
 
-
+        
         for batch_idx, (data, target) in enumerate(train_data_loader):
             data, target = Variable(data), Variable(target)
             self.optim.zero_grad()
@@ -63,8 +66,13 @@ class LeNet(nn.Module):
             loss = F.nll_loss(pred, target)
             loss.backward()
             self.optim.step()
+            self.training_loss += loss
+
             if batch_idx % args.log_interval==0:
                 print("Step: %d, negative log loss %f" % (batch_idx, loss.data[0]))
+        
+        # compute the average training loss
+        self.training_loss = self.training_loss / len(train_data_loader)        
         
         # log parameters of current epoch
         torch.save(self.state_dict(), "latest_parameters.pt")
@@ -79,11 +87,12 @@ class LeNet(nn.Module):
         for data, target in test_data_loader:
             data, target = Variable(data, volatile=True), Variable(target)
             pred = self.forward(data)
-            test_loss = F.nll_loss(pred, target, size_average=False).data[0]
+            self.test_loss = F.nll_loss(pred, target, size_average=False).data[0]
             pred = pred.data.max(1, keepdim=True)[1]
             correct = pred.eq(target.data.view_as(pred)).cpu().sum()
 
-        print("The accuracy is:%f" % (float(correct) / float(len(test_data))))
+        self.accuracy = float(correct) / float(len(test_data))
+        print("The accuracy is:%f" % self.accuracy)
 
             
 
@@ -91,9 +100,12 @@ class LeNet(nn.Module):
 if __name__=="__main__":
     initial_learning_rate = args.lr
     a = LeNet()
-    for epoch in range(100):
+    f = open("training_log", "w+")
+    for epoch in range(2):
         args.lr = initial_learning_rate / (epoch + 1)
         a.train()
         a.evaluate()
+        f.write("Epoch" + str(epoch) + ',' "Average training loss:" + str(a.training_loss) + ",")
+        f.write("Average test loss:" + str(self.test_loss) + "," + "Accuracy:" + str(self.accuracy))
 
-
+    f.close()
