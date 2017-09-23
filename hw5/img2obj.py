@@ -14,7 +14,7 @@ parser.add_argument("--batch_size", type=int, default=128, metavar="N",
     help="mini-batch size")
 parser.add_argument("--epoch", type=int, default=10, metavar="N",
     help="number of epochs to train")
-parser.add_argument("--lr", type=float, default=0.1, metavar="LR",
+parser.add_argument("--lr", type=float, default=0.01, metavar="LR",
     help="learning rate")
 parser.add_argument("--momentum", type=float, default=0.5, metavar="M",
     help="SGD momentum")
@@ -22,6 +22,8 @@ parser.add_argument("--seed", type=int, default=5, metavar="S",
     help="random seed to for initialization")
 parser.add_argument("--log_interval", type=int, default=100, metavar="N",
     help="number of steps to print out one log")
+
+
 args = parser.parse_args()
 
 class LeNet(nn.Module):
@@ -102,10 +104,11 @@ if __name__=="__main__":
     a = LeNet()
     f = open("training_log", "w+")
     for epoch in range(2):
-        args.lr = initial_learning_rate / (epoch + 1)
+        args.lr = initial_learning_rate
         a.train()
+        torch.save(a.state_dict(), "parameters_epoch"+str(epoch)+".pt")
         a.evaluate()
         f.write("Epoch" + str(epoch) + ',' "Average training loss:" + str(a.training_loss) + ",")
-        f.write("Average test loss:" + str(self.test_loss) + "," + "Accuracy:" + str(self.accuracy))
+        f.write("Average test loss:" + str(a.test_loss) + "," + "Accuracy:" + str(a.accuracy))
 
     f.close()
