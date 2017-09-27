@@ -8,13 +8,17 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 from time import time
 import argparse
+import numpy as np
+import pickle
+import cv2
+from PIL import Image
 
 parser = argparse.ArgumentParser(description='Lenet on CIFAR100')
 parser.add_argument("--batch_size", type=int, default=128, metavar="N",
     help="mini-batch size")
 parser.add_argument("--epoch", type=int, default=10, metavar="N",
     help="number of epochs to train")
-parser.add_argument("--lr", type=float, default=0.01, metavar="LR",
+parser.add_argument("--lr", type=float, default=1e-5, metavar="LR",
     help="learning rate")
 parser.add_argument("--momentum", type=float, default=0.5, metavar="M",
     help="SGD momentum")
@@ -30,27 +34,69 @@ args = parser.parse_args()
 class LeNet(nn.Module):
     def __init__(self):
         super(LeNet, self).__init__()
-        self.conv1 = nn.Conv2d(3,6,5, padding=2)
-        self.conv2 = nn.Conv2d(6, 16, 5, padding=2)
+        with open("./meta", "rb") as f:
+            self.fine_label_names = pickle.load(f)["fine_label_names"]    
+
+        self.conv1 = nn.Conv2d(3,6,5, stride=2, padding=2)
+        self.conv2 = nn.Conv2d(6, 16, 5, stride=2, padding=2)
         self.fc1 = nn.Linear(16*8*8, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, 100)
-        self.optim = optim.SGD(self.parameters(), lr=args.lr, 
-            momentum=args.momentum)
+        self.optim = optim.SGD(self.parameters(), lr=args.lr, momentum=args.momentum)
         self.training_loss = 0
         self.test_loss = 0
         self.accuracy = 0
 
     def forward(self, x):
+        if isinstance(x, np.ndarray):
+            x = torch.from_numpy(x)
+        x = x.view(-1, 3, 32, 32).float()
+        x = Variable(x)
         x = F.relu(self.conv1(x))
-        x = F.max_pool2d(x, 2)
         x = F.relu(self.conv2(x))
-        x = F.max_pool2d(x, 2)
         x = x.view(-1, 8*8*16)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return F.log_softmax(x)
+
+    def view(self, img):
+        # Argument:
+        #   img: 3x32x32 tensor in uint8
+        # Return:
+        #   image and the prediction of its class
+        pic = Image.fromarray(img)
+        pic.show()
+        img = img.astype(np.float32)
+        img = img / 255
+        pred = self.forward(img)
+        pred = pred.view(-1)
+        values, indices = pred.max(0)
+        indices = np.asscalar(indices.data.numpy())
+        print(self.fine_label_names[indices])
+
+    def cam(self):
+        cap = cv2.VideoCapture(0)
+        while(True):
+            ret, frame = cap.read()
+            cv2.imshow('frame',frame)
+            
+            ch = cv2.waitKey(1)
+            if ch == ord("c"):
+                pic = frame
+                pic = cv2.resize(pic, (32, 32))
+                pic = np.array(pic)
+                pic = pic / 255
+                pred = self.forward(pic).view(-1)
+                values, indices = pred.max(0)
+                indices = np.asscalar(indices.data.numpy())
+                print(self.fine_label_names[indices])
+
+            if ch == ord("q"):
+                break
+        cap.release()
+        cap.destroyAllWindow()
+        
 
     def train(self):
         print("Starting a new epoch with learning rate: %f" % args.lr)
@@ -63,7 +109,7 @@ class LeNet(nn.Module):
 
         
         for batch_idx, (data, target) in enumerate(train_data_loader):
-            data, target = Variable(data), Variable(target)
+            target = Variable(target)
             self.optim.zero_grad()
             pred = self.forward(data)
             loss = F.nll_loss(pred, target)
@@ -77,8 +123,8 @@ class LeNet(nn.Module):
         # compute the average training loss
         self.training_loss = self.training_loss / len(train_data_loader)        
         
-        # log parameters of current epoch
-        torch.save(self.state_dict(), "latest_parameters.pt")
+
+    
 
     def evaluate(self):              
         # Accuracy of the model after the current epoch
@@ -88,7 +134,7 @@ class LeNet(nn.Module):
         test_data_loader = DataLoader(test_data, batch_size=len(test_data),
             shuffle=False)
         for data, target in test_data_loader:
-            data, target = Variable(data, volatile=True), Variable(target)
+            target = Variable(target)
             pred = self.forward(data)
             self.test_loss = F.nll_loss(pred, target, size_average=False).data[0]
             pred = pred.data.max(1, keepdim=True)[1]
@@ -100,16 +146,7 @@ class LeNet(nn.Module):
             
 
             
-if __name__=="__main__":
-    initial_learning_rate = args.lr
-    a = LeNet()
-    f = open("training_log", "w+")
-    for epoch in range(args.num_epoch):
-        args.lr = initial_learning_rate
-        a.train()
-        torch.save(a.state_dict(), "parameters_epoch"+str(epoch)+".pt")
-        a.evaluate()
-        f.write("Epoch" + str(epoch) + ',' "Average training loss:" + str(a.training_loss) + ",")
-        f.write("Average test loss:" + str(a.test_loss) + "," + "Accuracy:" + str(a.accuracy))
 
-    f.close()
+
+a = LeNet()
+a.cam()
